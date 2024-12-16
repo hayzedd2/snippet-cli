@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/atotto/clipboard"
+	"github.com/hayzedd2/snippet-cli/utils"
 	"github.com/spf13/cobra"
 	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
-	"github.com/atotto/clipboard"
 )
 
 type Snippet struct {
@@ -52,32 +49,62 @@ var copyCmd = &cobra.Command{
 	},
 }
 
+var getCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all saved snippets",
+	Run: func(cmd *cobra.Command, args []string) {
+		snippets := loadSnippets()
+		if len(snippets.Snippets) == 0 {
+			fmt.Println("No snippets found")
+			return
+		}
+		fmt.Println("\nAvailable Snippets:")
+		fmt.Println("------------------")
+		for i, snippet := range snippets.Snippets {
+			fmt.Printf("%d. Tag: %s\n   Created: %s\n",
+				i+1,
+				snippet.Tag,
+				snippet.CreatedAt.Format("2006-01-02 15:04:05"),
+			)
+		}
+		fmt.Printf("\nTotal snippets: %d\n", len(snippets.Snippets))
+		fmt.Println("\nUse 'snippet get --tag <tag_name>' to view a specific snippet")
+	},
+}
+
 var saveCmd = &cobra.Command{
 	Use:   "save",
 	Short: "Save a new snippet",
 	Run: func(cmd *cobra.Command, args []string) {
-		tag, _ := cmd.Flags().GetString("tag")
-		filepath, _ := cmd.Flags().GetString("filepath")
-		startLine, _ := cmd.Flags().GetString("startline")
-		endLine, _ := cmd.Flags().GetString("endline")
-		if tag == "" {
-			fmt.Println("Tag is required")
-			return
-		}
-		startLineInt, err := strconv.ParseInt(startLine, 10, 64)
-		if err != nil {
-			fmt.Println("Invalid start line")
-		}
-		endLineInt, err := strconv.ParseInt(endLine, 10, 64)
-		if err != nil {
-			fmt.Println("Invalid end line")
-		}
-		code, err := getCodeFromFile(filepath, startLineInt, endLineInt)
+		opts, err := utils.ParseSaveOptions(cmd)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		saveSnippet(tag, code)
+		code, err := utils.GetCodeFromFile(opts.FilePath, opts.StartLine, opts.EndLine)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		saveSnippet(opts.Tag, code)
+	},
+}
+
+var deleteCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete a saved snippet",
+	Run: func(cmd *cobra.Command, args []string) {
+		tag, _ := cmd.Flags().GetString("tag")
+		if tag == "" {
+			fmt.Println("Tag is required")
+			return
+		}
+		err := deleteSnippet(tag)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("Snippet with tag '%s' deleted successfully\n", tag)
 	},
 }
 
@@ -87,27 +114,15 @@ func init() {
 	saveCmd.Flags().StringP("startline", "s", "", "Line to start saving code")
 	saveCmd.Flags().StringP("endline", "e", "", "Line to end saving code")
 	copyCmd.Flags().StringP("tag", "t", "", "Tag to identify the snippet")
+	deleteCmd.Flags().StringP("tag", "t", "", "Tag to identify snippet to delete")
 	rootCmd.AddCommand(saveCmd)
 	rootCmd.AddCommand(copyCmd)
-}
-
-func getStorageFile() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error getting home directory:", err)
-		os.Exit(1)
-	}
-
-	snippetDir := filepath.Join(homeDir, ".snippets")
-	if err := os.MkdirAll(snippetDir, 0755); err != nil {
-		fmt.Println("Error creating snippets directory:", err)
-		os.Exit(1)
-	}
-	return filepath.Join(snippetDir, "snippets.json")
+	rootCmd.AddCommand(getCmd)
+	rootCmd.AddCommand(deleteCmd)
 }
 
 func loadSnippets() SnippetStore {
-	file := getStorageFile()
+	file := utils.GetStorageFile()
 	data, err := os.ReadFile(file)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -129,10 +144,8 @@ func saveSnippet(tag, code string) {
 	existingSnippets := loadSnippets()
 	for _, s := range existingSnippets.Snippets {
 		if s.Tag == tag {
-			if s.Tag == tag {
-				fmt.Printf("Tag '%s' already exists. Please use a different tag.\n", tag)
-				return
-			}
+			fmt.Printf("Tag '%s' already exists. Please use a different tag.\n", tag)
+			return
 		}
 	}
 	newSnippet := Snippet{
@@ -140,45 +153,18 @@ func saveSnippet(tag, code string) {
 		Code:      code,
 		CreatedAt: time.Now(),
 	}
-
 	existingSnippets.Snippets = append(existingSnippets.Snippets, newSnippet)
 	data, err := json.MarshalIndent(existingSnippets, "", "  ")
 	if err != nil {
 		fmt.Println("Error encoding snippets:", err)
 		return
 	}
-
-	err = os.WriteFile(getStorageFile(), data, 0644)
+	err = os.WriteFile(utils.GetStorageFile(), data, 0644)
 	if err != nil {
 		fmt.Println("Error writing snippets to file:", err)
 		return
 	}
 	fmt.Printf("Snippet saved successfully with tag '%s'\n", tag)
-}
-
-func getCodeFromFile(filePath string, startLine, endLine int64) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("error opening file: %w", err)
-	}
-	defer file.Close()
-	var selectedLines []string
-	scanner := bufio.NewScanner(file)
-	var currentLine int64 = 1
-	for scanner.Scan() {
-		if currentLine >= startLine && currentLine <= endLine {
-			selectedLines = append(selectedLines, scanner.Text())
-		}
-		if currentLine > endLine {
-			break
-		}
-		currentLine++
-	}
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading file '%s': %v", filePath, err)
-	}
-	code := strings.Join(selectedLines, "\n")
-	return code, nil
 }
 
 func copySnippet(tag string) (Snippet, error) {
@@ -188,7 +174,34 @@ func copySnippet(tag string) (Snippet, error) {
 			return s, nil
 		}
 	}
-	return Snippet{}, fmt.Errorf("snippet with tag '%s' not found", tag)
+	return Snippet{}, fmt.Errorf("\nsnippet with tag '%s' not found.\nUse 'snippet list' to see saved snippet tags", tag)
+}
+
+func deleteSnippet(tag string) error {
+	store := loadSnippets()
+	index := -1
+	for i, s := range store.Snippets {
+		if s.Tag == tag {
+			index = i
+			break
+		}
+	}
+
+	// If tag wasn't found
+	if index == -1 {
+		return fmt.Errorf("snippet with tag '%s' not found", tag)
+	}
+	store.Snippets = append(store.Snippets[:index], store.Snippets[index+1:]...)
+	data, err := json.MarshalIndent(store, "", "    ")
+	if err != nil {
+		return fmt.Errorf("error encoding snippets: %w", err)
+	}
+
+	if err := os.WriteFile(utils.GetStorageFile(), data, 0644); err != nil {
+		return fmt.Errorf("error saving snippets: %w", err)
+	}
+
+	return nil
 }
 func main() {
 	err := rootCmd.Execute()
