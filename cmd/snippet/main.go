@@ -49,7 +49,7 @@ var copyCmd = &cobra.Command{
 	},
 }
 
-var getCmd = &cobra.Command{
+var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all saved snippets",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -69,6 +69,28 @@ var getCmd = &cobra.Command{
 		}
 		fmt.Printf("\nTotal snippets: %d\n", len(snippets.Snippets))
 		fmt.Println("\nUse 'snippet get --tag <tag_name>' to view a specific snippet")
+	},
+}
+
+var getCmd = &cobra.Command{
+	Use:   "get",
+	Short: "Get a specific snippet",
+	Run: func(cmd *cobra.Command, args []string) {
+		tag, _ := cmd.Flags().GetString("tag")
+		if tag == "" {
+			fmt.Println("Tag is required")
+			return
+		}
+		snippet, err := getSingleSnippet(tag)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("Tag: %s\nCode: %s\nCreated: %s\n",
+			snippet.Tag,
+			snippet.Code,
+			snippet.CreatedAt.Format("2006-01-02 15:04:05"),
+		)
 	},
 }
 
@@ -115,10 +137,12 @@ func init() {
 	saveCmd.Flags().StringP("endline", "e", "", "Line to end saving code")
 	copyCmd.Flags().StringP("tag", "t", "", "Tag to identify the snippet")
 	deleteCmd.Flags().StringP("tag", "t", "", "Tag to identify snippet to delete")
+	getCmd.Flags().StringP("tag", "t", "", "Tag to view single snippet")
 	rootCmd.AddCommand(saveCmd)
 	rootCmd.AddCommand(copyCmd)
-	rootCmd.AddCommand(getCmd)
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(deleteCmd)
+	rootCmd.AddCommand(getCmd)
 }
 
 func loadSnippets() SnippetStore {
@@ -200,9 +224,21 @@ func deleteSnippet(tag string) error {
 	if err := os.WriteFile(utils.GetStorageFile(), data, 0644); err != nil {
 		return fmt.Errorf("error saving snippets: %w", err)
 	}
-
 	return nil
 }
+
+
+func getSingleSnippet(tag string) (Snippet, error) {
+	store := loadSnippets()
+	for _, s := range store.Snippets {
+		if s.Tag == tag {
+			return s, nil
+		}
+	}
+	return Snippet{}, fmt.Errorf("snippet with tag '%s' not found", tag)
+}
+
+
 func main() {
 	err := rootCmd.Execute()
 	if err != nil {
