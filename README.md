@@ -11,6 +11,7 @@ go install github.com/hayzedd2/snippet-cli/cmd/snippet@latest
 ## Features
 
 - Save code snippets from files via CLI
+- Save entire files as snippets
 - Copy snippets to the clipboard for quick use
 - List all saved snippets with their tags and creation timestamps
 - Retrieve specific snippets by their tags
@@ -20,7 +21,10 @@ go install github.com/hayzedd2/snippet-cli/cmd/snippet@latest
 
 ### Save a Snippet
 
-The save command allows you to store a snippet from a specific file. You must specify the starting line number. For multi-line snippets, you can optionally specify an end line.
+The save command has two modes: saving specific lines or saving an entire file.
+
+#### Save Specific Lines
+The standard save command allows you to store a snippet from specific lines in a file. You must specify the starting line number. For multi-line snippets, you can optionally specify an end line.
 
 **Full Command:**
 ```bash
@@ -45,6 +49,19 @@ snippet save -t <tag> -f <filepath> -s <startline>
 - `filepath`: Path to the source file
 - `startline`: Starting line number of the snippet (required)
 - `endline`: Ending line number of the snippet (optional, for multi-line snippets)
+
+#### Save Entire File
+You can save the entire contents of a file as a snippet using the `save all` command. This doesn't require specifying line numbers.
+
+**Full Command:**
+```bash
+snippet save all --file <filepath> --tag <tag>
+```
+
+**Short Form:**
+```bash
+snippet save all -f <filepath> -t <tag>
+```
 
 ### List All Snippets
 
@@ -82,6 +99,11 @@ Save multiple lines:
 snippet save --tag "parse-options" --filepath cmd/snippet/main.go --startline 10 --endline 40
 ```
 
+Save an entire file:
+```bash
+snippet save all -t "main-function" -f main.go
+```
+
 Using short form:
 ```bash
 # Single line
@@ -99,8 +121,7 @@ snippet get --tag "log-function"
 ## Tips
 
 - Line numbers start at 1 (not 0)
-- The `startline` parameter is always required
+- The `startline` parameter is always required when not using `save all`
 - For single-line snippets, omit the `endline` parameter
 - When `endline` is specified, both start and end lines are included in the snippet
-
-
+- Use `save all` when you want to store the entire contents of a file

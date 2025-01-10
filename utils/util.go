@@ -18,20 +18,25 @@ type saveOptions struct {
 	EndLine   int64
 }
 
+type saveAllOptions struct {
+	Tag      string
+	FilePath string
+}
+
 func ParseSaveOptions(cmd *cobra.Command) (*saveOptions, error) {
 	opts := &saveOptions{}
 	var err error
-	opts.Tag, err = cmd.Flags().GetString("tag")
-	if err != nil {
-		return nil, fmt.Errorf("invalid tag: %w", err)
+	opts.Tag, _ = cmd.Flags().GetString("tag")
+	if opts.Tag == "" {
+		return nil, returnError("tag", "some")
 	}
-	opts.FilePath, err = cmd.Flags().GetString("filepath")
-	if err != nil {
-		return nil, fmt.Errorf("invalid filepath: %w", err)
+	opts.FilePath, _ = cmd.Flags().GetString("filepath")
+	if opts.FilePath == "" {
+		return nil, returnError("filepath", "some")
 	}
-	startLine, err := cmd.Flags().GetString("startline")
-	if err != nil {
-		return nil, fmt.Errorf("invalid start line: %w", err)
+	startLine, _ := cmd.Flags().GetString("startline")
+	if startLine == "" {
+		return nil, returnError("startline", "some")
 	}
 	opts.StartLine, err = strconv.ParseInt(startLine, 10, 64)
 	if err != nil {
@@ -59,6 +64,18 @@ func ParseSaveOptions(cmd *cobra.Command) (*saveOptions, error) {
 	return opts, nil
 }
 
+func ParseSaveAllOptions(cmd *cobra.Command) (*saveAllOptions, error) {
+	opts := &saveAllOptions{}
+	opts.FilePath, _ = cmd.Flags().GetString("filepath")
+	if opts.FilePath == "" {
+		return nil, returnError("filepath", "all")
+	}
+	opts.Tag, _ = cmd.Flags().GetString("tag")
+	if opts.Tag == "" {
+		return nil, returnError("tag", "all")
+	}
+	return opts, nil
+}
 func GetStorageFile() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -81,11 +98,11 @@ func GetCodeFromFile(filePath string, startLine, endLine int64) (string, error) 
 	}
 	defer file.Close()
 	if startLine < 1 {
-        return "", fmt.Errorf("start line must be greater than 0")
-    }
-    if endLine < startLine {
-        return "", fmt.Errorf("end line must be greater than or equal to start line")
-    }
+		return "", fmt.Errorf("start line must be greater than 0")
+	}
+	if endLine < startLine {
+		return "", fmt.Errorf("end line must be greater than or equal to start line")
+	}
 	var selectedLines []string
 	scanner := bufio.NewScanner(file)
 	var currentLine int64 = 1
@@ -101,10 +118,27 @@ func GetCodeFromFile(filePath string, startLine, endLine int64) (string, error) 
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("error reading file '%s': %v", filePath, err)
 	}
-	 // Handle case where file has fewer lines than requested
-	 if currentLine <= startLine {
-        return "", fmt.Errorf("file has only %d lines, requested start line was %d", currentLine-1, startLine)
-    }
+	// Handle case where file has fewer lines than requested
+	if currentLine <= startLine {
+		return "", fmt.Errorf("file has only %d lines, requested start line was %d", currentLine-1, startLine)
+	}
 	code := strings.Join(selectedLines, "\n")
 	return code, nil
 }
+
+func returnError(s, t string) error {
+	if t == "some" {
+		return fmt.Errorf("%v is required \nUse `snippet save -t tag -f filepath -startline startline -endline? endline` to save a snippet", s)
+	} else {
+		return fmt.Errorf("%v is required \nUse `snippet save all -f filepath -t tag` to save all content in a file", s)
+	}
+}
+
+func GetAllContentFromFile(filePath string) (string, error) {
+    content, err := os.ReadFile(filePath)
+    if err != nil {
+        return "", fmt.Errorf("error reading file: %w", err)
+    }
+    return string(content), nil
+}
+
