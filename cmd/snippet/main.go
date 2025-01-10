@@ -94,6 +94,23 @@ var getCmd = &cobra.Command{
 	},
 }
 
+var saveAllCmd = &cobra.Command{
+	Use:   "all",
+	Short: "Save all contents in a file",
+	Run: func(cmd *cobra.Command, args []string) {
+		opts, err := utils.ParseSaveAllOptions(cmd)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		code,err:= utils.GetAllContentFromFile(opts.FilePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		saveSnippet(opts.Tag, code)
+	},
+}
 var saveCmd = &cobra.Command{
 	Use:   "save",
 	Short: "Save a new snippet",
@@ -138,11 +155,14 @@ func init() {
 	copyCmd.Flags().StringP("tag", "t", "", "Tag to identify the snippet")
 	deleteCmd.Flags().StringP("tag", "t", "", "Tag to identify snippet to delete")
 	getCmd.Flags().StringP("tag", "t", "", "Tag to view single snippet")
+	saveAllCmd.Flags().StringP("filepath", "f", "", "File to save code from")
+	saveAllCmd.Flags().StringP("tag", "t", "", "Tag to identify the snippet")
 	rootCmd.AddCommand(saveCmd)
 	rootCmd.AddCommand(copyCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(getCmd)
+	saveCmd.AddCommand(saveAllCmd)
 }
 
 func loadSnippets() SnippetStore {
@@ -227,7 +247,6 @@ func deleteSnippet(tag string) error {
 	return nil
 }
 
-
 func getSingleSnippet(tag string) (Snippet, error) {
 	store := loadSnippets()
 	for _, s := range store.Snippets {
@@ -237,7 +256,6 @@ func getSingleSnippet(tag string) (Snippet, error) {
 	}
 	return Snippet{}, fmt.Errorf("snippet with tag '%s' not found", tag)
 }
-
 
 func main() {
 	err := rootCmd.Execute()
